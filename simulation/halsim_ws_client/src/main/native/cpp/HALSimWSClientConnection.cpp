@@ -49,7 +49,7 @@ void HALSimWSClientConnection::Initialize() {
       return;
     }
 
-    if (!hws->RegisterWebsocket(GetSharedFromThis())) {
+    if (!hws->RegisterWebsocket(shared_from_this())) {
       wpi::errs() << "Unable to register websocket\n";
       return;
     }
