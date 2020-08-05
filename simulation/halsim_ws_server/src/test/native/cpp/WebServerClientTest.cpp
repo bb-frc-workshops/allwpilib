@@ -13,8 +13,6 @@
 
 #include "WebServerClientConnectionTest.h"
 
-#include <iostream>
-
 static constexpr int kTcpConnectAttemptTimeout = 1000;
 
 namespace uv = wpi::uv;
@@ -110,7 +108,7 @@ void WebServerClientTest::OnNetValueChanged(const wpi::json& msg) {
  m_json = msg;
 }
 
-const wpi::json & WebServerClientTest::GetMessage() {
+const wpi::json & WebServerClientTest::GetLastMessage() {
   return m_json;
 }
 

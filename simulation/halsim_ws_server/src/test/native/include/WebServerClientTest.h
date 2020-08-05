@@ -39,7 +39,7 @@ class WebServerClientTest {
   static void Exit();
 
   void SendMessage(const wpi::json& msg);
-  const wpi::json & GetMessage();
+  const wpi::json & GetLastMessage();
   void OnNetValueChanged(const wpi::json& msg);
 
  private:

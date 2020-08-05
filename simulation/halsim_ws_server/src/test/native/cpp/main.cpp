@@ -12,7 +12,7 @@
 #include "HALSimWSServer.h"
 #include "WebServerClientTest.h"
 #include <wpi/uv/Loop.h>
-#include <iostream>
+#include <wpi/raw_ostream.h>
 
 using namespace wpilibws;
 
@@ -60,7 +60,7 @@ TEST_F(WebServerIntegrationTest, DigitalOutput) {
   auto loop = ws->GetLoop();
   auto timer =  wpi::uv::Timer::Create(loop);
   timer->timeout.connect([EXPECTED_VALUE, CHANNEL] { 
-    std::cout << "************ Setting DIO value ***********" << std::endl;
+    wpi::outs() << "************ Setting DIO value ***********\n";
     HALSIM_SetDIOValue(CHANNEL, EXPECTED_VALUE);
   });
 
@@ -68,12 +68,12 @@ TEST_F(WebServerIntegrationTest, DigitalOutput) {
   timer->Start(uv::Timer::Time(3000));
   HAL_RunMain();
 
-  std::string test_type("");
-  std::string test_device("");
+  std::string test_type;
+  std::string test_device;
   bool test_value = true; //Default from initialization
   try {
-    auto & msg = WebServerClientTest::GetInstance()->GetMessage();
-    test_type = msg.at("type").get_ref<const std::string &>();
+    auto & msg = WebServerClientTest::GetInstance()->GetLastMessage();
+    test_type = msg.at("type").get_ref<const std::string&>();
     test_device = msg.at("device").get_ref<const std::string&>();
     auto & data = msg.at("data");
     wpi::json::const_iterator it = data.find("<>value");
@@ -103,7 +103,7 @@ TEST_F(WebServerIntegrationTest, DigitalInput) {
     wpi::json msg = {
       {"type", "DIO"}, {"device", std::to_string(CHANNEL)}, {"data", {{"<>value", EXPECTED_VALUE}}}
     };
-    std::cout << "Input JSON is " << msg.dump() << std::endl;
+    wpi::outs() << "Input JSON is " << msg.dump() << "\n";
     WebServerClientTest::GetInstance()->SendMessage(msg);
   });
 
@@ -111,7 +111,6 @@ TEST_F(WebServerIntegrationTest, DigitalInput) {
   timer->Start(uv::Timer::Time(3000));
   HAL_RunMain();
   timer->Unreference();
-
   bool test_value = HALSIM_GetDIOValue(CHANNEL);
   EXPECT_EQ(EXPECTED_VALUE,test_value);
 }
