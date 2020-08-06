@@ -9,9 +9,9 @@
 
 #include <wpi/SmallString.h>
 #include <wpi/raw_ostream.h>
+#include <wpi/raw_uv_ostream.h>
 #include <wpi/uv/util.h>
-
-#include "WebServerClientConnectionTest.h"
+#include <sstream>
 
 static constexpr int kTcpConnectAttemptTimeout = 1000;
 
@@ -21,31 +21,75 @@ namespace wpilibws {
 
 std::shared_ptr<WebServerClientTest> WebServerClientTest::g_instance;
 
-bool WebServerClientTest::Initialize(std::shared_ptr<uv::Loop> & loop) {
+void WebServerClientTest::InitializeWebSocket(const std::string & host, int port, const std::string & uri) {
 
-  //m_loop = std::make_shared(loop);
+  std::stringstream ss;
+  ss << host << ":" << port;
+  wpi::outs() << "Will attempt to connect to: " << ss.str() << uri << "\n";
+  m_websocket = wpi::WebSocket::CreateClient(*m_tcp_client.get(), uri, ss.str());
+
+  // Hook up events
+  m_websocket->open.connect_extended([this](auto conn, wpi::StringRef) {
+    conn.disconnect();
+    m_buffers = std::make_unique<BufferPool>();
+
+    m_exec =
+        UvExecFunc::Create(m_tcp_client->GetLoop(), [](auto out, LoopFunc func) {
+          func();
+          out.set_value();
+        });
+
+    m_ws_connected = true;
+    wpi::errs() << "WebServerClientTest: WebSocket Connected\n";
+  });
+
+  m_websocket->text.connect([this](wpi::StringRef msg, bool) {
+  
+    wpi::json j;
+    try {
+      j = wpi::json::parse(msg);
+    } catch (const wpi::json::parse_error& e) {
+      std::string err("JSON parse failed: ");
+      err += e.what();
+      wpi::errs() << err << "\n";
+      m_websocket->Fail(1003, err);
+      return;
+    }
+    
+    OnNetValueChanged(j);
+  });
+
+  m_websocket->closed.connect([this](uint16_t, wpi::StringRef) {
+    if (m_ws_connected) {
+      wpi::errs() << "WebServerClientTest: Websocket Disconnected\n";
+      m_ws_connected = false;
+    }
+  });
+}
+
+bool WebServerClientTest::Initialize(std::shared_ptr<uv::Loop> & loop) {
   m_loop = loop;
   m_loop->error.connect(
       [](uv::Error err) { wpi::errs() << "uv Error: " << err.str() << "\n"; });
 
   m_tcp_client = uv::Tcp::Create(m_loop);
   if (!m_tcp_client) {
+    wpi::errs() << "ERROR: Could not create TCP Client\n"; 
     return false;
   }
 
   // Hook up TCP client events
-  m_tcp_client->error.connect(
-      [this, socket = m_tcp_client.get()](wpi::uv::Error err) {
-        if (m_tcp_connected) {
-          m_tcp_connected = false;
-          m_connect_attempts = 0;
-          m_loop->Stop();
-          return;
-        }
+  m_tcp_client->error.connect([this, socket = m_tcp_client.get()](wpi::uv::Error err) {
+    if (m_tcp_connected) {
+      m_tcp_connected = false;
+      m_connect_attempts = 0;
+      m_loop->Stop();
+      return;
+    }
 
-        // If we weren't previously connected, attempt a reconnection
-        m_connect_timer->Start(uv::Timer::Time(kTcpConnectAttemptTimeout));
-      });
+    // If we weren't previously connected, attempt a reconnection
+    m_connect_timer->Start(uv::Timer::Time(kTcpConnectAttemptTimeout));
+  });
 
   m_tcp_client->closed.connect(
       []() { wpi::errs() << "TCP connection closed\n"; });
@@ -57,50 +101,66 @@ bool WebServerClientTest::Initialize(std::shared_ptr<uv::Loop> & loop) {
   }
   // Set up the timer to attempt connection
   m_connect_timer->timeout.connect([this] { AttemptConnect(); });
+  m_connect_timer->Start(uv::Timer::Time(0));
 
-  wpi::errs() << "WebServerClientTest Initialized\n";
-  wpi::errs() << "Will attempt to connect to: localhost:8080/wpilibws\n";
+  wpi::outs() << "WebServerClientTest Initialized\n";
 
   return true;
 }
 
-void WebServerClientTest::StartTimer() {
-  m_connect_timer->Start(uv::Timer::Time(0));
-}
-
 void WebServerClientTest::AttemptConnect() {
   m_connect_attempts++;
-  wpi::errs() << "Connection Attempt " << m_connect_attempts << "\n";
+  wpi::outs() << "Test Client Connection Attempt " << m_connect_attempts << "\n";
 
-  if(m_connect_attempts >= 10) {
+  if(m_connect_attempts >= 5) {
+    wpi::errs() << "Test Client Timeout. Unable to connect\n";
     Exit();
     return;
   }
 
   struct sockaddr_in dest;
   uv::NameToAddr("localhost", 8080, &dest);
-  m_tcp_client->Connect(dest, [this, socket = m_tcp_client.get()]() {
+  m_tcp_client->Connect(dest, [this]() {
     m_tcp_connected = true;
-    m_hws = std::make_shared<WebServerClientConnectionTest>(m_tcp_client);
-    m_hws->Initialize("localhost", 8080, "/wpilibws");
+    InitializeWebSocket("localhost", 8080, "/wpilibws");
   });
 }
 
 void WebServerClientTest::Exit() {
-  auto inst = GetInstance();
-  if (!inst) {
-    return;
-  }
-
-  auto loop = inst->m_loop;
-  loop->Walk([](uv::Handle& h) {
+  m_loop->Walk([](uv::Handle& h) {
     h.SetLoopClosing(true);
     h.Close();
   });
+  
 }
 
 void WebServerClientTest::SendMessage(const wpi::json& msg) {
-  m_hws->SendMessage(msg);
+  if (msg.empty()) {
+    wpi::errs() << "Message to send is empty\n";
+    return;
+  }
+
+  wpi::SmallVector<uv::Buffer, 4> sendBufs;
+
+  wpi::raw_uv_ostream os{sendBufs, [this]() -> uv::Buffer {
+                           std::lock_guard lock(m_buffers_mutex);
+                           return m_buffers->Allocate();
+                         }};
+  os << msg;
+
+  // Call the websocket send function on the uv loop
+  m_exec->Call([this, sendBufs]() mutable {
+    m_websocket->SendText(sendBufs, [this](auto bufs, wpi::uv::Error err) {
+      {
+        std::lock_guard lock(m_buffers_mutex);
+        m_buffers->Release(bufs);
+      }
+      if (err) {
+        wpi::errs() << err.str() << "\n";
+        wpi::errs().flush();
+      }
+    });
+  });
 }
 
 void WebServerClientTest::OnNetValueChanged(const wpi::json& msg) {

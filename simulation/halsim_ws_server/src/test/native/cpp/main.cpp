@@ -34,7 +34,6 @@ public:
       m_loop->Stop();
     });
     m_webserver_client->Initialize(m_loop);
-    m_webserver_client->StartTimer();
     m_testTimer->Start(uv::Timer::Time{5000}); // End test after 5 seconds 
   }
 
@@ -67,7 +66,7 @@ TEST_F(WebServerIntegrationTest, DigitalOutput) {
   // Wait 3 seconds before sending change in value
   timer->Start(uv::Timer::Time(3000));
   HAL_RunMain();
-
+  
   std::string test_type;
   std::string test_device;
   bool test_value = true; //Default from initialization
@@ -82,8 +81,7 @@ TEST_F(WebServerIntegrationTest, DigitalOutput) {
       test_value = it.value();
     }
   } catch (wpi::json::exception& e) {
-    //wpi::errs() << "Error with incoming message: " << e.what() << "\n";
-    std::cerr << "Error with incoming message: " << e.what() << std::endl;
+    wpi::errs() << "Error with incoming message: " << e.what() << "\n";
   }
   timer->Unreference();
 
