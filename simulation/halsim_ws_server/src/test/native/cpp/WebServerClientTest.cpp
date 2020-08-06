@@ -21,6 +21,7 @@ namespace wpilibws {
 
 std::shared_ptr<WebServerClientTest> WebServerClientTest::g_instance;
 
+// Create Web Socket and specify event callbacks 
 void WebServerClientTest::InitializeWebSocket(const std::string & host, int port, const std::string & uri) {
 
   std::stringstream ss;
@@ -55,8 +56,9 @@ void WebServerClientTest::InitializeWebSocket(const std::string & host, int port
       m_websocket->Fail(1003, err);
       return;
     }
-    
-    OnNetValueChanged(j);
+    // Save last message received 
+    m_json = j;
+
   });
 
   m_websocket->closed.connect([this](uint16_t, wpi::StringRef) {
@@ -67,6 +69,7 @@ void WebServerClientTest::InitializeWebSocket(const std::string & host, int port
   });
 }
 
+// Create tcp client, specify callbacks, and create timers for loop
 bool WebServerClientTest::Initialize(std::shared_ptr<uv::Loop> & loop) {
   m_loop = loop;
   m_loop->error.connect(
@@ -161,11 +164,6 @@ void WebServerClientTest::SendMessage(const wpi::json& msg) {
       }
     });
   });
-}
-
-void WebServerClientTest::OnNetValueChanged(const wpi::json& msg) {
- // Save the last message sent
- m_json = msg;
 }
 
 const wpi::json & WebServerClientTest::GetLastMessage() {

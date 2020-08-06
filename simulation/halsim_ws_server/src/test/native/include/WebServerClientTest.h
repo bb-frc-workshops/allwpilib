@@ -42,11 +42,10 @@ class WebServerClientTest {
 
   void SendMessage(const wpi::json& msg);
   const wpi::json & GetLastMessage();
-  void OnNetValueChanged(const wpi::json& msg);
+
 private:
   void InitializeWebSocket(const std::string & host, int port, const std::string & uri);
 
- private:
   static std::shared_ptr<WebServerClientTest> g_instance;
   bool m_tcp_connected = false;
   std::shared_ptr<wpi::uv::Timer> m_connect_timer;
