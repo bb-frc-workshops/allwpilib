@@ -29,13 +29,13 @@ public:
     m_webserver_client = std::shared_ptr<WebServerClientTest>((new WebServerClientTest()));
     WebServerClientTest::SetInstance(m_webserver_client);
     auto webserver = HALSimWeb::GetInstance();
-    auto m_loop = webserver->GetLoop();
-    m_webserver_client->Initialize(m_loop);
+    auto loop = webserver->GetLoop();
+    m_webserver_client->Initialize(loop);
 
     // Create timer for loop run
-    m_testTimer = wpi::uv::Timer::Create(m_loop);
-    m_testTimer->timeout.connect([m_loop] {
-      m_loop->Stop();
+    m_testTimer = wpi::uv::Timer::Create(loop);
+    m_testTimer->timeout.connect([loop] {
+      loop->Stop();
     });
     m_testTimer->Start(uv::Timer::Time{4000}); // End test after 4 seconds 
   }
@@ -55,7 +55,6 @@ public:
   }
 
 private:
-  std::shared_ptr<wpi::uv::Loop> m_loop;
   std::shared_ptr<WebServerClientTest> m_webserver_client;
   std::shared_ptr<wpi::uv::Timer> m_testTimer;
 };
