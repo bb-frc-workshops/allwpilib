@@ -34,9 +34,9 @@ bool HALSimWS::Initialize() {
     try {
       m_port = std::stoi(port);
     } catch (const std::invalid_argument& err) {
-      wpi::errs() << "Error decoding HALSIMWS_PORT. Defaulting to 8080. ("
+      wpi::errs() << "Error decoding HALSIMWS_PORT ("
                   << err.what() << ")\n";
-      m_port = 8080;
+      return false;
     }
   } else {
     m_port = 8080;
@@ -156,6 +156,11 @@ bool HALSimWS::RegisterWebsocket(
 
 void HALSimWS::CloseWebsocket(
     std::shared_ptr<HALSimBaseWebSocketConnection> hws) {
+  // Inform the providers that they need to cancel callbacks
+  m_providers.ForEach([](std::shared_ptr<HALSimWSBaseProvider> provider) {
+    provider->OnNetworkDisconnected();
+  });
+
   if (hws == m_hws.lock()) {
     m_hws.reset();
   }
