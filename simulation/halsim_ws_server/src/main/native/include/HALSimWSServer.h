@@ -20,6 +20,8 @@
 #include <wpi/uv/Loop.h>
 #include <wpi/uv/Tcp.h>
 
+#include <WSProvider_SimDevice.h>
+
 namespace wpilibws {
 
 class HALSimHttpConnection;
@@ -31,7 +33,8 @@ class HALSimWeb {
     g_instance = inst;
   }
 
-  explicit HALSimWeb(ProviderContainer& providers) : m_providers(providers) {}
+  explicit HALSimWeb(ProviderContainer& providers, HALSimWSProviderSimDevices& simDevicesProvider)
+      : m_providers(providers), m_simDevicesProvider(simDevicesProvider) {}
 
   HALSimWeb(const HALSimWeb&) = delete;
   HALSimWeb& operator=(const HALSimWeb&) = delete;
@@ -60,6 +63,7 @@ class HALSimWeb {
 
   // list of providers
   ProviderContainer& m_providers;
+  HALSimWSProviderSimDevices& m_simDevicesProvider;
 
   std::shared_ptr<wpi::uv::Loop> m_loop;
   std::shared_ptr<wpi::uv::Tcp> m_server;
